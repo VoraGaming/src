@@ -367,6 +367,14 @@ void ConfigServerGame::install(void)
 	KEY_INT     (spaceAiEnemySearchesPerFrame, 15);
 	KEY_BOOL    (groundShouldSleep, true);
 	KEY_BOOL    (spaceShouldSleep, true);
+	// Idle frame rate for EMPTY space zones (see GameServer::run). 0 = off, so space always runs at spaceFrameRateLimit.
+	// When > 0, a space zone that has had no players for spaceIdleDelaySeconds runs at this rate instead,
+	// and goes back to spaceFrameRateLimit as soon as a player is present. Never used on ground scenes.
+	KEY_FLOAT   (spaceIdleFrameRateLimit, 0.0f);
+	KEY_INT     (spaceIdleDelaySeconds, 60);
+	// Longest sleep (ms) per pass while waiting for the next frame. 1 = the old fixed 1 ms sleep.
+	// Larger values mean fewer wakeups; the sleep is always cut short so it never runs past the next frame.
+	KEY_INT     (frameWaitSleepMs, 1);
 	KEY_BOOL    (shipMoveValidationEnabled, true);
 	KEY_INT     (shipMoveCheckIntervalMs, 1000);
 	KEY_INT     (shipMoveCheckFudgeTimeMs, 5000);

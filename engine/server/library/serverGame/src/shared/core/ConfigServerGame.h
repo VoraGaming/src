@@ -419,6 +419,9 @@ class ConfigServerGame
 		int             spaceAiEnemySearchesPerFrame;
 		bool            groundShouldSleep;
 		bool            spaceShouldSleep;
+		float           spaceIdleFrameRateLimit; // frame rate for a space zone with no players; 0 = off
+		int             spaceIdleDelaySeconds;   // how long a space zone must be empty before it goes idle
+		int             frameWaitSleepMs;        // max sleep per pass while waiting for the next frame; 1 = old behaviour
 		bool            shipMoveValidationEnabled;
 		int             shipMoveCheckIntervalMs;
 		int             shipMoveCheckFudgeTimeMs; // how long validation uses higher values when they are being reduced
@@ -944,6 +947,9 @@ class ConfigServerGame
 	static int              getSpaceAiEnemySearchesPerFrame();
 	static bool             getGroundShouldSleep();
 	static bool             getSpaceShouldSleep();
+	static float            getSpaceIdleFrameRateLimit();
+	static int              getSpaceIdleDelaySeconds();
+	static int              getFrameWaitSleepMs();
 	static bool             getShipMoveValidationEnabled();
 	static int              getShipMoveCheckIntervalMs();
 	static int              getShipMoveCheckFudgeTimeMs();
@@ -2960,6 +2966,27 @@ inline bool ConfigServerGame::getGroundShouldSleep()
 inline bool ConfigServerGame::getSpaceShouldSleep()
 {
 	return data->spaceShouldSleep;
+}
+
+// ----------------------------------------------------------------------
+
+inline float ConfigServerGame::getSpaceIdleFrameRateLimit()
+{
+	return data->spaceIdleFrameRateLimit;
+}
+
+// ----------------------------------------------------------------------
+
+inline int ConfigServerGame::getSpaceIdleDelaySeconds()
+{
+	return data->spaceIdleDelaySeconds;
+}
+
+// ----------------------------------------------------------------------
+
+inline int ConfigServerGame::getFrameWaitSleepMs()
+{
+	return data->frameWaitSleepMs;
 }
 
 // ----------------------------------------------------------------------

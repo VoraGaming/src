@@ -267,6 +267,13 @@ namespace GameServerNamespace
 	std::map<NetworkId, std::pair<int, NetworkId> > s_clusterStartupResidenceStructureListByStructure;
 
 	uint32_t getFrameRateLimit();
+	uint32_t getTargetFrameTimeMs(uint32_t nowMs, int numClients);
+
+	// Space idle frame rate (see getTargetFrameTimeMs): true while this empty space zone runs at the idle rate
+	bool     s_spaceIdle = false;
+	// Clock::timeMs() when this zone last had a player in it (set to the start time in GameServer::run)
+	uint32_t s_spaceLastPlayerSeenMs = 0;
+
 	void broadCastHyperspaceOnWarp(ServerObject const * owner);
 	ShipObject *getAttachedShip(CreatureObject *creature);
 
@@ -4056,6 +4063,66 @@ uint32_t GameServerNamespace::getFrameRateLimit()
 
 // ----------------------------------------------------------------------
 
+/**
+ * How long one game frame should take, in milliseconds. Called once per main-loop pass.
+ *
+ * Normally this is 1000 / spaceFrameRateLimit (space) or 1000 / groundFrameRateLimit (ground),
+ * exactly as before. The only exception is the optional space idle rate:
+ * when [GameServer] spaceIdleFrameRateLimit is above 0, a SPACE zone that has had no players
+ * (no connected clients on this game server) for spaceIdleDelaySeconds runs at that lower rate.
+ * As soon as a player is present again it goes straight back to the normal rate.
+ * A client exists here for every player whose character is in this zone, including passengers
+ * and crew inside someone else's ship (they are handed over with the ship, see
+ * ServerObject::transferAuthoritySceneChange), so players never run at the idle rate.
+ * One log line is written on each switch (channel "SpaceIdle"); nothing is logged per frame.
+ */
+uint32_t GameServerNamespace::getTargetFrameTimeMs(uint32_t const nowMs, int const numClients)
+{
+	uint32_t const normalFrameTimeMs = static_cast<uint32_t>(1000.0f / getFrameRateLimit());
+
+	float idleFrameRate = ConfigServerGame::getSpaceIdleFrameRateLimit();
+
+	// Feature off (the default) or a ground scene: behave exactly as before.
+	if (idleFrameRate <= 0.0f || !ServerWorld::isSpaceScene())
+		return normalFrameTimeMs;
+
+	// Players present (or the zone is still loading): run at the normal rate and restart the empty timer.
+	if (numClients > 0 || !ServerWorld::isPreloadComplete())
+	{
+		s_spaceLastPlayerSeenMs = nowMs;
+		if (s_spaceIdle)
+		{
+			s_spaceIdle = false;
+			LOG("SpaceIdle", ("Scene %s: player present, leaving idle frame rate (back to %d fps)", ServerWorld::getSceneId().c_str(), static_cast<int>(getFrameRateLimit())));
+		}
+		return normalFrameTimeMs;
+	}
+
+	// Keep the idle rate sensible: at least 1 frame per second (it is also never faster than the normal rate, see below).
+	if (idleFrameRate < 1.0f)
+		idleFrameRate = 1.0f;
+
+	// No players. Only go idle after the zone has been empty for spaceIdleDelaySeconds (avoids flapping).
+	if (!s_spaceIdle)
+	{
+		int const delaySeconds = ConfigServerGame::getSpaceIdleDelaySeconds();
+		uint32_t const delayMs = (delaySeconds > 0) ? static_cast<uint32_t>(delaySeconds) * 1000u : 0u;
+
+		// unsigned subtraction stays correct if the millisecond counter wraps
+		if (nowMs - s_spaceLastPlayerSeenMs < delayMs)
+			return normalFrameTimeMs;
+
+		s_spaceIdle = true;
+		LOG("SpaceIdle", ("Scene %s: no players for %d seconds, entering idle frame rate (%g fps)", ServerWorld::getSceneId().c_str(), delaySeconds, static_cast<double>(idleFrameRate)));
+	}
+
+	// Never let the idle rate be faster than the normal rate.
+	uint32_t const idleFrameTimeMs = static_cast<uint32_t>(1000.0f / idleFrameRate);
+	return (idleFrameTimeMs > normalFrameTimeMs) ? idleFrameTimeMs : normalFrameTimeMs;
+}
+
+// ----------------------------------------------------------------------
+
 void GameServer::run(void)
 {
 	getInstance().initialize();
@@ -4068,7 +4135,10 @@ void GameServer::run(void)
 	uint32_t startTime = Clock::timeMs();
 	uint32_t lastFrameProcessStartTime = startTime;
 
-	const uint32_t targetFrameTime = static_cast<uint32_t>(1000.0f/getFrameRateLimit());
+	// Recomputed at the top of every loop pass, so a space zone can switch between its
+	// normal and idle frame rate (see getTargetFrameTimeMs). Without the idle setting it never changes.
+	uint32_t targetFrameTime = static_cast<uint32_t>(1000.0f/getFrameRateLimit());
+	s_spaceLastPlayerSeenMs = startTime;
 
 	const GenericValueTypeMessage<uint32_t> gameServerTaskManagerKeepAlive("GameServerTaskManagerKeepAlive", Os::getProcessId());
 
@@ -4106,6 +4176,8 @@ void GameServer::run(void)
 			NetworkHandler::flushAndConfirmAll();
 		}
 
+		targetFrameTime = getTargetFrameTimeMs(static_cast<uint32_t>(Clock::timeMs()), getInstance().getNumClients());
+
 		bool barrierReached = true;
 
 		do
@@ -4121,7 +4193,23 @@ void GameServer::run(void)
 			    || (!ServerWorld::isSpaceScene() && ConfigServerGame::getGroundShouldSleep()))
 			{
 				PROFILER_AUTO_BLOCK_DEFINE("Os::sleep");
-				Os::sleep(1);
+
+				// Default (frameWaitSleepMs = 1): sleep 1 ms per pass, exactly as before.
+				// Larger values: sleep up to that long, but only until the frame barrier below
+				// would be reached, so frames still start on time (fewer wakeups, same frame timing).
+				int sleepMs = 1;
+				int const maxSleepMs = ConfigServerGame::getFrameWaitSleepMs();
+				if (maxSleepMs > 1)
+				{
+					// same "+15 ms" adjustment as the barrier check below
+					uint32_t const elapsedMs = static_cast<uint32_t>(Clock::timeMs()) - lastFrameProcessStartTime + 15u;
+					if (elapsedMs < targetFrameTime)
+					{
+						uint32_t const remainingMs = targetFrameTime - elapsedMs;
+						sleepMs = (remainingMs < static_cast<uint32_t>(maxSleepMs)) ? static_cast<int>(remainingMs) : maxSleepMs;
+					}
+				}
+				Os::sleep(sleepMs);
 			}
 
 			if (ConfigServerGame::getCommoditiesMarketEnabled())
