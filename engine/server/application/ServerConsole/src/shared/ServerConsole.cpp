@@ -57,11 +57,15 @@ void ServerConsole::run()
 	{
 		std::string input;
 		char inBuf[1024] = {"\0"};
-		while(! feof(stdin))
+		// Read up to sizeof(inBuf) single bytes per call, so fread returns the real
+		// byte count (short commands included), and append exactly that many bytes.
+		// Stop at end of input or on a read error, so the loop can never spin forever.
+		while(! feof(stdin) && ! ferror(stdin))
 		{
-			if (fread(inBuf, 1024, 1, stdin)) {
-				input += inBuf;
-				memset(inBuf, 0, sizeof(inBuf));
+			size_t n = fread(inBuf, 1, sizeof(inBuf), stdin);
+			if(n > 0)
+			{
+				input.append(inBuf, n);
 			}
 		}
 
@@ -81,7 +85,7 @@ void ServerConsole::run()
 		}
 		else
 		{
-			fprintf(stderr, "Nothing to send to the server. Aborting");
+			fprintf(stderr, "Nothing to send to the server. Aborting\n");
 		}
 	}
 }
