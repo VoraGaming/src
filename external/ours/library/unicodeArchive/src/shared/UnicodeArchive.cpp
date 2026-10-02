@@ -20,6 +20,11 @@ namespace Archive
 		unsigned int size = 0;
 		Archive::get (source, size);
 		
+		// The character count comes from the sender. Refuse one whose bytes run
+		// past the end of the received data (dividing avoids overflowing size * 2).
+		if (size > source.getSize() / sizeof (Unicode::unicode_char_t))
+			throw ReadException("Archive::get(Unicode::String) - length exceeds remaining buffer");
+
 		const unsigned char * const buf            = source.getBuffer();
 		const Unicode::unicode_char_t * const ubuf = reinterpret_cast<const Unicode::unicode_char_t *>(buf);
 		
