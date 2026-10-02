@@ -285,8 +285,11 @@ void FileManifest::addNewManifestEntry(const char *fileName, int fileSize)
 		if (fileSize)
 			((insertReturn.first)->second)->size = fileSize;
 
+		// the map already had an entry for this file and did not take ours
+		delete entry;
 	}
-	delete entry;
+	// otherwise the map now owns entry; FileManifest::remove() deletes it
+	// (deleting it here left a dangling pointer in the map and a double free at exit)
 #else
 	return;
 #endif
@@ -303,9 +306,11 @@ void FileManifest::addStoredManifestEntry(const char *fileName, const char * sce
 	entry->size     = fileSize;
 	entry->accesses = 0;
 
-	s_manifest.insert(std::pair<const uint32, FileManifestEntry*>(crc, entry));
-
-	delete entry;
+	// If the insert succeeds the map owns entry and FileManifest::remove() deletes
+	// it; only delete it here if the map already had this file. (Deleting it
+	// unconditionally left a dangling pointer in the map and a double free at exit.)
+	if (!s_manifest.insert(std::pair<const uint32, FileManifestEntry*>(crc, entry)).second)
+		delete entry;
 }
 
 // -----------------------------------------------------------------------
