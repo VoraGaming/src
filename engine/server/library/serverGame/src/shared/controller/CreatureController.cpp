@@ -633,7 +633,9 @@ void CreatureController::handleMessage(const int message, const float value, con
 	break;
 	case CM_setSayMode:
 	{
-		const MessageQueueGenericValueType<unsigned long> * const msg = safe_cast<const MessageQueueGenericValueType<unsigned long> *>(data);
+		// sent and unpacked as uint32_t (CreatureObject::setSayMode, unpackUnsignedInt);
+		// unsigned long is 8 bytes on 64-bit Linux and would read past the value
+		const MessageQueueGenericValueType<uint32_t> * const msg = safe_cast<const MessageQueueGenericValueType<uint32_t> *>(data);
 		if (msg)
 		{
 			owner->setSayMode(msg->getValue());
@@ -1155,7 +1157,9 @@ void CreatureController::handleMessage(const int message, const float value, con
 
 	case CM_addSessionActivity:
 	{
-		const MessageQueueGenericValueType<unsigned long> * const msg = safe_cast<const MessageQueueGenericValueType<unsigned long> *>(data);
+		// sent and unpacked as uint32_t (PlayerObject, unpackUnsignedInt);
+		// unsigned long is 8 bytes on 64-bit Linux and would read past the value
+		const MessageQueueGenericValueType<uint32_t> * const msg = safe_cast<const MessageQueueGenericValueType<uint32_t> *>(data);
 		if (msg)
 		{
 			PlayerObject * player = PlayerCreatureController::getPlayerObject(owner);
