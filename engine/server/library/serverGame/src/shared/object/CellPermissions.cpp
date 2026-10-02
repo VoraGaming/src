@@ -30,9 +30,69 @@
 #include "sharedObject/Container.h"
 #include "sharedNetworkMessages/UpdateCellPermissionMessage.h"
 
+#include <cctype>
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
+#include <limits>
+
 // ======================================================================
 
 static std::set<BuildingObject const*> s_activeUpdaters;
+
+// ======================================================================
+
+namespace CellPermissionsNamespace
+{
+	// Permission entries are text typed by players or written by scripts, so the
+	// numbers in them can be anything. std::stoi threw on bad or too-large text,
+	// and nothing caught it, so one bad entry crashed the game server. These
+	// helpers return false instead of throwing.
+
+	// Parse the whole of text as one base-10 integer in [minValue, maxValue].
+	// Surrounding whitespace is allowed; anything else after the number is not.
+	bool parseInteger(std::string const & text, long long const minValue, long long const maxValue, long long & result)
+	{
+		char const * const begin = text.c_str();
+		char * end = nullptr;
+		errno = 0;
+		long long const value = strtoll(begin, &end, 10);
+		if (end == begin || errno == ERANGE)
+			return false;
+		while (*end != '\0' && isspace(static_cast<unsigned char>(*end)))
+			++end;
+		if (*end != '\0' || value < minValue || value > maxValue)
+			return false;
+		result = value;
+		return true;
+	}
+
+	// A guild id or city id: a signed 32-bit int.
+	bool parseInt32(std::string const & text, int & result)
+	{
+		long long value = 0;
+		if (!parseInteger(text, (std::numeric_limits<int32_t>::min)(), (std::numeric_limits<int32_t>::max)(), value))
+			return false;
+		result = static_cast<int>(value);
+		return true;
+	}
+
+	// A 32-bit id such as a station id or a faction crc. Scripts (Java ints)
+	// write these signed, e.g. "-615855020", but they can also appear unsigned,
+	// e.g. "3679112276". Both spellings are the same 32 bits, so accept either.
+	// Station ids above 2,147,483,647 are common (they are hashed account
+	// names), and the Imperial faction crc is above it too.
+	bool parseBits32(std::string const & text, uint32 & result)
+	{
+		long long value = 0;
+		if (!parseInteger(text, (std::numeric_limits<int32_t>::min)(), (std::numeric_limits<uint32_t>::max)(), value))
+			return false;
+		result = static_cast<uint32>(value); // a negative value keeps its 32-bit pattern
+		return true;
+	}
+}
+
+using namespace CellPermissionsNamespace;
 
 // ======================================================================
 
@@ -211,8 +271,9 @@ CellPermissions::PermissionObject::PermissionObject(const std::string& name) :
     // If the string starts with "Faction:" it should be the faction hash
     else if (name.rfind("faction:", 0) == 0)
     {
-        const int hash = std::stoi(name.substr(8, name.length()));
-        if(PvpData::isImperialFactionId(hash) || PvpData::isRebelFactionId(hash))
+        uint32 hash = 0;
+        if(parseBits32(name.substr(8, name.length()), hash)
+            && (PvpData::isImperialFactionId(hash) || PvpData::isRebelFactionId(hash)))
         {
             m_originalPermissionFormat = PF_FACTION_NAME;
             m_permissionString = name.substr(8, name.length());
@@ -295,8 +356,8 @@ std::string CellPermissions::PermissionObject::getName() const
         }
         case PF_GUILD_NAME:
         {
-            const int guildId = std::stoi(m_permissionString);
-            if(GuildInterface::guildExists(guildId))
+            int guildId = 0;
+            if(parseInt32(m_permissionString, guildId) && GuildInterface::guildExists(guildId))
             {
                 nameString = "guild:" + GuildInterface::getGuildAbbrev(guildId);
             }
@@ -304,8 +365,8 @@ std::string CellPermissions::PermissionObject::getName() const
         }
         case PF_CITY_NAME:
         {
-            const int cityId = std::stoi(m_permissionString);
-            if(CityInterface::cityExists(cityId))
+            int cityId = 0;
+            if(parseInt32(m_permissionString, cityId) && CityInterface::cityExists(cityId))
             {
                 nameString = "city:" + CityInterface::getCityInfo(cityId).getCityName();
             }
@@ -326,7 +387,11 @@ std::string CellPermissions::PermissionObject::getName() const
         }
         case PF_FACTION_NAME:
         {
-            const int hash = std::stoi(m_permissionString);
+            uint32 hash = 0;
+            if(!parseBits32(m_permissionString, hash))
+            {
+                break; // unreadable: return an empty name, like an unknown faction
+            }
             if(PvpData::isImperialFactionId(hash))
             {
                 nameString = "faction:Imperial";
@@ -620,7 +685,8 @@ bool CellPermissions::isOnList(PermissionList const &permList, CreatureObject co
             }
             if (name.rfind("account:", 0) == 0)
             {
-                if (static_cast<uint32>(std::stoi(name.substr(8, name.length()))) == stationId)
+                uint32 entryStationId = 0;
+                if (parseBits32(name.substr(8, name.length()), entryStationId) && entryStationId == stationId)
                 {
                     return true;
                 }
