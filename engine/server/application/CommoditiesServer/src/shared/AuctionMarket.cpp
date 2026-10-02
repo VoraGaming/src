@@ -659,7 +659,14 @@ AuctionMarket::~AuctionMarket()
 	{
 		delete (*i).second;
 	}
-	for (std::map<NetworkId, AuctionLocation *>::iterator i = m_locationIdMap.begin(); i != m_locationIdMap.end(); ++i)
+	// Each ~AuctionLocation removes itself from m_locationIdMap (through
+	// sanityCheckAuctionLocationBeingDestroyed), which broke this loop's
+	// iterator and crashed CommoditiesServer on shutdown. Move the map's
+	// contents into a local first and delete from that. The other location
+	// indexes stay intact so the destructors can still clean them up.
+	std::map<NetworkId, AuctionLocation *> locations;
+	locations.swap(m_locationIdMap);
+	for (std::map<NetworkId, AuctionLocation *>::iterator i = locations.begin(); i != locations.end(); ++i)
 	{
 		delete (*i).second;
 	}
