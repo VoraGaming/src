@@ -278,15 +278,17 @@ void FileManifest::addNewManifestEntry(const char *fileName, int fileSize)
 	// increment the accesses 
 	++(((insertReturn.first)->second)->accesses);
 
-	// if the insert failed
+	// if the insert failed the map did not take ownership of the entry, so
+	// free it here; on success the map owns it and we must not delete it
+	// (deleting would leave a dangling pointer that is freed again at exit)
 	if (!insertReturn.second)
 	{
 		// make sure the file is using the new fileSize - fileSize is 0 if this is entered due to a TreeFile::exists call
 		if (fileSize)
 			((insertReturn.first)->second)->size = fileSize;
 
+		delete entry;
 	}
-	delete entry;
 #else
 	return;
 #endif
@@ -303,9 +305,12 @@ void FileManifest::addStoredManifestEntry(const char *fileName, const char * sce
 	entry->size     = fileSize;
 	entry->accesses = 0;
 
-	s_manifest.insert(std::pair<const uint32, FileManifestEntry*>(crc, entry));
-
-	delete entry;
+	// only free the entry if the map did not take ownership of it (i.e. the
+	// insert failed); on success the map owns it and deleting it here would
+	// leave a dangling pointer that is freed again at exit
+	std::pair<ManifestMap::iterator, bool> insertReturn = s_manifest.insert(std::pair<const uint32, FileManifestEntry*>(crc, entry));
+	if (!insertReturn.second)
+		delete entry;
 }
 
 // -----------------------------------------------------------------------

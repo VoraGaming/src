@@ -659,9 +659,13 @@ AuctionMarket::~AuctionMarket()
 	{
 		delete (*i).second;
 	}
-	for (std::map<NetworkId, AuctionLocation *>::iterator i = m_locationIdMap.begin(); i != m_locationIdMap.end(); ++i)
+	// take ownership of the pointers locally so ~AuctionLocation can erase
+	// itself from m_locationIdMap (via sanityCheck) without invalidating the loop iterator
+	std::map<NetworkId, AuctionLocation *> localMap(m_locationIdMap);
+	m_locationIdMap.clear();
+	for (auto & kv : localMap)
 	{
-		delete (*i).second;
+		delete kv.second;
 	}
 }
 

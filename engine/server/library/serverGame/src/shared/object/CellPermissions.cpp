@@ -9,6 +9,9 @@
 // ======================================================================
 
 #include <utility>
+#include <cstdlib>
+#include <cerrno>
+#include <climits>
 
 #include "serverGame/FirstServerGame.h"
 #include "serverGame/CellPermissions.h"
@@ -33,6 +36,92 @@
 // ======================================================================
 
 static std::set<BuildingObject const*> s_activeUpdaters;
+
+// ======================================================================
+// Non-throwing id parsers. The permission-list ids here are std::hash-derived
+// uint32 station ids and faction CRCs, about half of which sit above
+// INT32_MAX (e.g. the Imperial faction CRC 3679112276). std::stoi throws
+// std::out_of_range on those and the callers do not catch it, so it crashed
+// the game server. These parse without throwing: bad text simply yields 0,
+// which the callers treat as "no match" (empty name / not on the list).
+// ======================================================================
+namespace CellPermissionsNamespace
+{
+	// ----------------------------------------------------------------------
+	/**
+	 * Parse a whole decimal integer without throwing. Returns true and sets
+	 * @p out if the text is a clean integer (no leading/trailing junk, within
+	 * int64 range); otherwise returns false and @p out is unchanged.
+	 */
+	inline bool parseInteger(std::string const &text, int64 &out)
+	{
+		if (text.empty())
+		{
+			return false;
+		}
+		errno = 0;
+		char * end = nullptr;
+		const long long value = std::strtoll(text.c_str(), &end, 10);
+		if (end == text.c_str())		// no digits consumed
+		{
+			return false;
+		}
+		if (*end != '\0')			// trailing non-numeric characters
+		{
+			return false;
+		}
+		if (errno == ERANGE)			// out of long long range
+		{
+			return false;
+		}
+		out = value;
+		return true;
+	}
+
+	// ----------------------------------------------------------------------
+	/**
+	 * Parse a 32-bit signed id (guild/city). Returns 0 if the text is not a
+	 * valid int32, so callers treat bad text as "no match".
+	 */
+	inline int parseInt32(std::string const &text)
+	{
+		int64 value = 0;
+		if (!parseInteger(text, value))
+		{
+			return 0;
+		}
+		if (value < INT32_MIN || value > INT32_MAX)
+		{
+			return 0;
+		}
+		return static_cast<int>(value);
+	}
+
+	// ----------------------------------------------------------------------
+	/**
+	 * Parse a 32-bit id that may be stored as a signed or unsigned 32-bit
+	 * value (station ids and faction CRCs are uint32 and can exceed INT32_MAX).
+	 * The Java scripts write ids in signed form, so a value like the Imperial
+	 * faction CRC 3679112276 can appear as -615855020: accept both spellings
+	 * and wrap a signed value into its unsigned 32-bit form (the original
+	 * static_cast<uint32>(std::stoi(...)) behaved the same way). Returns 0 if
+	 * the text is outside the signed-32 / unsigned-32 range, so callers treat
+	 * bad text as "no match".
+	 */
+	inline uint32 parseBits32(std::string const &text)
+	{
+		int64 value = 0;
+		if (!parseInteger(text, value))
+		{
+			return 0;
+		}
+		if (value < INT32_MIN || value > 0xFFFFFFFFll)
+		{
+			return 0;
+		}
+		return static_cast<uint32>(value);
+	}
+}
 
 // ======================================================================
 
@@ -211,7 +300,7 @@ CellPermissions::PermissionObject::PermissionObject(const std::string& name) :
     // If the string starts with "Faction:" it should be the faction hash
     else if (name.rfind("faction:", 0) == 0)
     {
-        const int hash = std::stoi(name.substr(8, name.length()));
+        const uint32 hash = CellPermissionsNamespace::parseBits32(name.substr(8, name.length()));
         if(PvpData::isImperialFactionId(hash) || PvpData::isRebelFactionId(hash))
         {
             m_originalPermissionFormat = PF_FACTION_NAME;
@@ -295,7 +384,7 @@ std::string CellPermissions::PermissionObject::getName() const
         }
         case PF_GUILD_NAME:
         {
-            const int guildId = std::stoi(m_permissionString);
+            const int guildId = CellPermissionsNamespace::parseInt32(m_permissionString);
             if(GuildInterface::guildExists(guildId))
             {
                 nameString = "guild:" + GuildInterface::getGuildAbbrev(guildId);
@@ -304,7 +393,7 @@ std::string CellPermissions::PermissionObject::getName() const
         }
         case PF_CITY_NAME:
         {
-            const int cityId = std::stoi(m_permissionString);
+            const int cityId = CellPermissionsNamespace::parseInt32(m_permissionString);
             if(CityInterface::cityExists(cityId))
             {
                 nameString = "city:" + CityInterface::getCityInfo(cityId).getCityName();
@@ -326,7 +415,7 @@ std::string CellPermissions::PermissionObject::getName() const
         }
         case PF_FACTION_NAME:
         {
-            const int hash = std::stoi(m_permissionString);
+            const uint32 hash = CellPermissionsNamespace::parseBits32(m_permissionString);
             if(PvpData::isImperialFactionId(hash))
             {
                 nameString = "faction:Imperial";
@@ -620,7 +709,7 @@ bool CellPermissions::isOnList(PermissionList const &permList, CreatureObject co
             }
             if (name.rfind("account:", 0) == 0)
             {
-                if (static_cast<uint32>(std::stoi(name.substr(8, name.length()))) == stationId)
+                if (CellPermissionsNamespace::parseBits32(name.substr(8, name.length())) == stationId)
                 {
                     return true;
                 }

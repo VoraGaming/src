@@ -81,6 +81,8 @@ inline void get(ReadIterator & source, std::string & target)
 		size = len;
 	else
 		get(source, size);
+	if (size > source.getSize())
+		throw ReadException("Archive::get(std::string) - length runs past the received data");
 	const char * c = reinterpret_cast<const char * const>(source.getBuffer());
 	target = std::string(c, size);
 	source.advance(size);
@@ -99,6 +101,8 @@ inline void get(ReadIterator & source, ByteStream & target)
 {
 	unsigned int s;
 	get(source, s);
+	if (s > source.getSize())
+		throw ReadException("Archive::get(ByteStream) - length runs past the received data");
 	target.put(source.getBuffer(), s);
 	source.advance(s);
 }

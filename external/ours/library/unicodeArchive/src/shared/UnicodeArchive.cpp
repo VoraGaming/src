@@ -19,7 +19,10 @@ namespace Archive
 	{
 		unsigned int size = 0;
 		Archive::get (source, size);
-		
+
+		if (size > source.getSize() / sizeof (Unicode::unicode_char_t))
+			throw ReadException ("Archive::get(Unicode::String) - length runs past the received data");
+
 		const unsigned char * const buf            = source.getBuffer();
 		const Unicode::unicode_char_t * const ubuf = reinterpret_cast<const Unicode::unicode_char_t *>(buf);
 		
