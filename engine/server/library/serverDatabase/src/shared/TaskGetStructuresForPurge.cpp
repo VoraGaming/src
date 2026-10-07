@@ -148,7 +148,7 @@ void TaskGetStructuresForPurge::onComplete()
 
 GetStructuresForPurgeQuery::GetStructuresForPurgeQuery(StationId stationId) :
 		DB::Query(),
-		m_station_id(static_cast<long>(stationId))
+		m_station_id(static_cast<long>(static_cast<int32>(stationId)))
 {
 }
 
@@ -201,7 +201,7 @@ NetworkId GetStructuresForPurgeQuery::getOwnerId() const
 
 GetVendorsForPurgeQuery::GetVendorsForPurgeQuery(StationId stationId) :
 		DB::Query(),
-		m_station_id(stationId)
+		m_station_id(static_cast<long>(static_cast<int32>(stationId)))
 {
 }
 

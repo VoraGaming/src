@@ -76,7 +76,7 @@ void DeleteCharacterCustomPersistStep::onComplete()
 // ======================================================================
 
 DeleteCharacterCustomPersistStep::DeleteCharacterQuery::DeleteCharacterQuery(uint32 stationId, const NetworkId &characterId) :
-	station_id(stationId),
+	station_id(static_cast<long>(static_cast<int32>(stationId))), // players.station_id is stored as signed int32, see CharacterQueries.cpp AddCharacter
 	character_id(characterId),
 	delete_minutes(ConfigServerDatabase::getCharacterImmediateDeleteMinutes()),
 	result()

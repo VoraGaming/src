@@ -44,8 +44,8 @@ TaskChangeStationId::~TaskChangeStationId()
 bool TaskChangeStationId::process(DB::Session *session)
 {
 	ChangeStationIdQuery qry;
-	qry.source_station_id = m_sourceStationId;
-	qry.destination_station_id = m_destinationStationId;
+	qry.source_station_id = static_cast<long>(static_cast<int32>(m_sourceStationId));
+	qry.destination_station_id = static_cast<long>(static_cast<int32>(m_destinationStationId));
 
 	m_success = session->exec(&qry);
 
