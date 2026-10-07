@@ -243,6 +243,35 @@ void CentralServerConnection::onReceive(const Archive::ByteStream & message)
 			LoginServer::getInstance().deleteCharacter(m_clusterId, deleteCharacter.getValue().getDestinationCharacterId(), deleteCharacter.getValue().getDestinationStationId());
 			break;
 		}
+		case constcrc("ServerDeleteCharacterReply") :
+		{
+			// ((loginServerId, stationId), (characterId, result)); result is persister.delete_character's code, -1 on DB error / no DB
+			GenericValueTypeMessage<std::pair<std::pair<uint32, StationId>, std::pair<NetworkId, int32> > > const reply(ri);
+			const StationId suid = reply.getValue().first.second;
+			const NetworkId & characterId = reply.getValue().second.first;
+			const int32 result = reply.getValue().second.second;
+
+			// the client may have disconnected meanwhile; the login row is handled regardless
+			ClientConnection * const target = LoginServer::getInstance().getValidatedClient(suid);
+			if (result == 0 || result == 2)
+			{
+				if (target)
+				{
+					target->onCharacterDeletedFromCluster(characterId);
+				}
+				DatabaseConnection::getInstance().deleteCharacter(m_clusterId, characterId, suid);
+			}
+			else
+			{
+				WARNING(true, ("ServerDeleteCharacterReply: cluster %u did not delete character %s for stationId %u (result %d). Login row kept.", m_clusterId, characterId.getValueString().c_str(), suid, result));
+				LOG("CustomerService", ("Player:delete FAILED on cluster %u for character %s stationId %u (result %d)", m_clusterId, characterId.getValueString().c_str(), suid, result));
+				if (target)
+				{
+					target->onCharacterDeleteFailed(characterId);
+				}
+			}
+			break;
+		}
 		case constcrc("RequestTransferClosePseudoClientConnection") :
 		{
 			GenericValueTypeMessage<std::pair<std::string, unsigned int> > const request(ri);

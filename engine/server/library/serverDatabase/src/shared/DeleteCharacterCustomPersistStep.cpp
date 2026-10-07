@@ -11,14 +11,18 @@
 #include "serverDatabase/ConfigServerDatabase.h"
 #include "serverDatabase/DatabaseProcess.h"
 #include "sharedDatabaseInterface/DbSession.h"
+#include "sharedFoundation/NetworkIdArchive.h"
+#include "sharedFoundation/StationId.h"
+#include "sharedLog/Log.h"
 #include "sharedNetworkMessages/GenericValueTypeMessage.h"
 
 // ======================================================================
 
-DeleteCharacterCustomPersistStep::DeleteCharacterCustomPersistStep(uint32 stationId, const NetworkId &characterId) :
+DeleteCharacterCustomPersistStep::DeleteCharacterCustomPersistStep(uint32 stationId, const NetworkId &characterId, uint32 loginServerId) :
 	m_characterId(characterId),
 	m_stationId(stationId),
-	m_resultCode(0)
+	m_loginServerId(loginServerId),
+	m_resultCode(-1)
 {
 }
 
@@ -36,10 +40,13 @@ bool DeleteCharacterCustomPersistStep::afterPersist(DB::Session *session)
 	DeleteCharacterQuery qry(m_stationId, m_characterId);
 
 	if (!(session->exec(&qry)))
+	{
+		m_resultCode = -1;
 		return false;
+	}
 	qry.done();
 
-	m_resultCode = qry.result.getValue();
+	m_resultCode = static_cast<int32>(qry.result.getValue());
 	return true;
 }
 
@@ -51,6 +58,18 @@ void DeleteCharacterCustomPersistStep::onComplete()
 	{
 		GenericValueTypeMessage<NetworkId> msg("ReleaseCharacterNameByIdMessage", m_characterId);
 		DatabaseProcess::getInstance().sendToAllGameServers(msg, true);
+	}
+	else if (m_resultCode == 1)
+	{
+		LOG("CustomerService", ("Player:WARNING delete of character %s for stationId %u failed: persister.delete_character returned 1 (no players row for this character and account). The character was not deleted.", m_characterId.getValueString().c_str(), m_stationId));
+		WARNING(true, ("DeleteCharacterCustomPersistStep: persister.delete_character returned 1 for character %s stationId %u", m_characterId.getValueString().c_str(), m_stationId));
+	}
+
+	// report the result to the login server that asked (through Central), so it only removes its row on success
+	if (m_loginServerId != 0)
+	{
+		GenericValueTypeMessage<std::pair<std::pair<uint32, StationId>, std::pair<NetworkId, int32> > > const reply("ServerDeleteCharacterReply", std::make_pair(std::make_pair(m_loginServerId, static_cast<StationId>(m_stationId)), std::make_pair(m_characterId, m_resultCode)));
+		DatabaseProcess::getInstance().sendToCentralServer(reply, true);
 	}
 }
 

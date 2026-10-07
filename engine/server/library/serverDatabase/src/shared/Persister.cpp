@@ -308,8 +308,8 @@ void Persister::startSave(void)
 	{
 		for (auto iter = m_charactersToDeleteThisSaveCycle->begin(); iter != m_charactersToDeleteThisSaveCycle->end(); ++iter)
 		{
-			DeleteCharacterCustomPersistStep *cps = new DeleteCharacterCustomPersistStep(iter->first, iter->second);
-			getSnapshotForObject(iter->second, 0)->addCustomPersistStep(cps);
+			DeleteCharacterCustomPersistStep *cps = new DeleteCharacterCustomPersistStep(iter->stationId, iter->characterId, iter->loginServerId);
+			getSnapshotForObject(iter->characterId, 0)->addCustomPersistStep(cps);
 		}
 
 		// if this is the final save before the cluster is brought down,
@@ -319,8 +319,8 @@ void Persister::startSave(void)
 		{
 			for (CharactersToDeleteType::const_iterator iter2 = m_charactersToDeleteNextSaveCycle->begin(); iter2 != m_charactersToDeleteNextSaveCycle->end(); ++iter2)
 			{
-				DeleteCharacterCustomPersistStep *cps = new DeleteCharacterCustomPersistStep(iter2->first, iter2->second);
-				getSnapshotForObject(iter2->second, 0)->addCustomPersistStep(cps);
+				DeleteCharacterCustomPersistStep *cps = new DeleteCharacterCustomPersistStep(iter2->stationId, iter2->characterId, iter2->loginServerId);
+				getSnapshotForObject(iter2->characterId, 0)->addCustomPersistStep(cps);
 			}
 		}
 	}
@@ -747,7 +747,7 @@ void Persister::receiveMessage(const MessageDispatch::Emitter & source, const Me
 			auto ri = static_cast<const GameNetworkMessage &>(message).getByteStream().begin();
 			ServerDeleteCharacterMessage m(ri);
 
-			deleteCharacter(m.getStationId(), m.getCharacterId());
+			deleteCharacter(m.getStationId(), m.getCharacterId(), m.getLoginServerId());
 			break;
 		}
 		case constcrc("RenameCharacterMessageEx") :
@@ -1042,7 +1042,7 @@ void Persister::handleMessageToAck(uint32 sourceServer, const MessageToId &messa
 
 // ----------------------------------------------------------------------
 
-void Persister::deleteCharacter(StationId stationId, const NetworkId &characterId)
+void Persister::deleteCharacter(StationId stationId, const NetworkId &characterId, uint32 loginServerId)
 {
 	// we cannot do the character delete in the current save cycle because
 	// the SQL that deletes a character also deletes items contained inside
@@ -1054,11 +1054,12 @@ void Persister::deleteCharacter(StationId stationId, const NetworkId &characterI
 	// this problem, we will delete the character during the next save cycle
 	if (m_charactersToDeleteNextSaveCycle && m_charactersToDeleteThisSaveCycle)
 	{
-		m_charactersToDeleteNextSaveCycle->push_back(std::make_pair(stationId, characterId));
+		CharacterToDelete const ctd = {stationId, characterId, loginServerId};
+		m_charactersToDeleteNextSaveCycle->push_back(ctd);
 	}
 	else
 	{
-		DeleteCharacterCustomPersistStep *cps = new DeleteCharacterCustomPersistStep(stationId, characterId);
+		DeleteCharacterCustomPersistStep *cps = new DeleteCharacterCustomPersistStep(stationId, characterId, loginServerId);
 		getSnapshotForObject(characterId, 0)->addCustomPersistStep(cps);
 	}
 

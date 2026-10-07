@@ -268,12 +268,8 @@ bool LoginServer::deleteCharacter(uint32 clusterId, NetworkId const &characterId
             ServerDeleteCharacterMessage smsg(suid, characterId, 0);
             cle->m_centralServerConnection->send(smsg, true);
 
-            ClientConnection *target = getValidatedClient(suid);
-            if (target) {
-                target->onCharacterDeletedFromCluster(characterId);
-            }
-
-            DatabaseConnection::getInstance().deleteCharacter(clusterId, characterId, suid);
+            // The login row is removed, and the client told, only when the cluster
+            // replies with ServerDeleteCharacterReply (see CentralServerConnection).
             return true;
         } else {
             DEBUG_REPORT_LOG(true, ("User %lu requested deleting character %s on cluster %lu, but the cluster is not currently connected.\n", suid, characterId.getValueString().c_str(), clusterId));

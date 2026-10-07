@@ -31,6 +31,8 @@
 #include "serverNetworkMessages/TransferReplyCharacterList.h"
 #include "serverNetworkMessages/TransferRequestMoveValidation.h"
 #include "serverNetworkMessages/UploadCharacterMessage.h"
+#include "sharedFoundation/NetworkIdArchive.h"
+#include "sharedFoundation/StationId.h"
 #include "sharedLog/Log.h"
 #include "sharedNetworkMessages/ConsoleChannelMessages.h"
 #include "unicodeArchive/UnicodeArchive.h"
@@ -283,6 +285,13 @@ void GameServerConnection::onReceive(Archive::ByteStream const &message)
 						 msg.getResponse(),
 						 msg.getToolId() );
 			CentralServer::getInstance().sendToLoginServer(  msg.getLoginServerID(), rmsg );
+			break;
+		}
+		case constcrc("ServerDeleteCharacterReply") :
+		{
+			// DB process reports the result of persister.delete_character; route it back to the login server that asked
+			GenericValueTypeMessage<std::pair<std::pair<uint32, StationId>, std::pair<NetworkId, int32> > > const msg(ri);
+			CentralServer::getInstance().sendToLoginServer(msg.getValue().first.first, msg);
 			break;
 		}
 		case constcrc("GetCharactersForAccountCSReplyMsg" ) :

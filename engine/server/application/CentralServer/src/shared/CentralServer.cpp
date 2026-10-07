@@ -1718,6 +1718,13 @@ void CentralServer::receiveMessage(const MessageDispatch::Emitter & source, cons
 				GenericValueTypeMessage <NetworkId> const msg2("DeleteCharacterNotificationMessage", msg
 						.getCharacterId());
 				IGNORE_RETURN(sendToRandomGameServer(msg2));
+			} else {
+				// no DB process: tell the login server the delete failed so it keeps the character
+				WARNING(true, ("ServerDeleteCharacterMessage for character %s stationId %u could not be forwarded: no DB connection. Replying failure to login server %u.", msg
+						.getCharacterId().getValueString().c_str(), msg.getStationId(), l->getProcessId()));
+				GenericValueTypeMessage <std::pair<std::pair<uint32, StationId>, std::pair<NetworkId, int32> > > const reply("ServerDeleteCharacterReply", std::make_pair(std::make_pair(l->getProcessId(), msg
+						.getStationId()), std::make_pair(msg.getCharacterId(), static_cast<int32>(-1))));
+				sendToLoginServer(l->getProcessId(), reply);
 			}
 			break;
 		}

@@ -109,7 +109,13 @@ class Persister : public MessageDispatch::Receiver
 	typedef std::map<NetworkId,PendingCharacter>  PendingCharactersType;
 	typedef std::vector<Snapshot*>                SnapshotListType;
 	typedef std::set<uint32>                      NewCharacterLockType;
-	typedef std::vector<std::pair<StationId, NetworkId> > CharactersToDeleteType;
+	struct CharacterToDelete
+	{
+		StationId stationId;
+		NetworkId characterId;
+		uint32    loginServerId; // login server to send ServerDeleteCharacterReply to (0 = none)
+	};
+	typedef std::vector<CharacterToDelete> CharactersToDeleteType;
 	
 	ServerSnapshotMap      m_currentSnapshots;
 	ServerSnapshotMap      m_newObjectSnapshots;
@@ -155,7 +161,7 @@ class Persister : public MessageDispatch::Receiver
 	void handleAddResourceTypeMessage(uint32 const serverId, AddResourceTypeMessage const & message);
 	void handlePurgeCompleteMessage(uint32 const serverId, StationId stationId);
 	void addCharacter            (uint32 stationId, const NetworkId &characterObject, uint32 creationGameServer, const Unicode::String &name, bool special);
-	void deleteCharacter         (StationId stationId, const NetworkId &characterId);
+	void deleteCharacter         (StationId stationId, const NetworkId &characterId, uint32 loginServerId);
 	void recordMoneyTransaction  (uint32 sourceServer, const NetworkId &transactionId, const int transactionType, const NetworkId &sourceId, const std::string &sourceString, const NetworkId &targetId, const std::string &targetString, int amount);
 	void moveToPlayer            (uint32 sourceServer, const NetworkId &objectId, const NetworkId &targetPlayer, int maxDepth, bool useBank, bool useDatapad);
 	void fixLoadWith             (uint32 sourceServer, const NetworkId &topmostObject, const NetworkId &startingLoadWith, int maxDepth);

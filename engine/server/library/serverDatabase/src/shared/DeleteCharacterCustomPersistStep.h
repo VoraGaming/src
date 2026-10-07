@@ -22,15 +22,16 @@
 class DeleteCharacterCustomPersistStep : public CustomPersistStep
 {
   public:
-	DeleteCharacterCustomPersistStep(uint32 stationId, const NetworkId &characterId);
+	DeleteCharacterCustomPersistStep(uint32 stationId, const NetworkId &characterId, uint32 loginServerId);
 	virtual bool beforePersist (DB::Session *session);
 	virtual bool afterPersist  (DB::Session *session);
 	virtual void onComplete    ();
-		
+
   private:
 	NetworkId        m_characterId;
 	uint32           m_stationId;
-	uint32           m_resultCode;
+	uint32           m_loginServerId;
+	int32            m_resultCode; // persister.delete_character: 0/2 = deleted, 1 = no match, -1 = DB error
 	
 	class DeleteCharacterQuery : public DB::Query
 	{

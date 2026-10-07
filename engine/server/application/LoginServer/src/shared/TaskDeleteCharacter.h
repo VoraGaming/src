@@ -53,6 +53,7 @@ class TaskDeleteCharacter : public DB::TaskRequest
 	uint32 m_clusterId;
 	NetworkId m_characterId;
 	StationId m_stationId;
+	bool m_succeeded;
 };
 
 // ======================================================================

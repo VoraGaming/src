@@ -282,6 +282,29 @@ void ClientConnection::onCharacterDeletedFromCluster(const NetworkId &characterI
 
 // ----------------------------------------------------------------------
 
+/**
+ * The character delete failed (cluster refused, no DB connection, or the
+ * login database delete failed).  The character stays on the account.
+ * Only acts if this client is waiting on that character, so a failed
+ * purge / transfer delete does not disturb an unrelated client request.
+ */
+void ClientConnection::onCharacterDeleteFailed(const NetworkId &characterId) {
+    std::vector<NetworkId>::iterator f = std::find(m_charactersPendingDeletion.begin(), m_charactersPendingDeletion.end(), characterId);
+    if (f == m_charactersPendingDeletion.end()) {
+        return;
+    }
+
+    m_charactersPendingDeletion.erase(f);
+    m_waitingForCharacterLoginDeletion = false;
+    m_waitingForCharacterClusterDeletion = false;
+
+    DeleteCharacterReplyMessage reply(DeleteCharacterReplyMessage::rc_CLUSTER_DOWN);
+    send(reply, true);
+    LOG("CustomerService", ("Player:delete FAILED for character %s for stationId %u at IP: %s", characterId.getValueString().c_str(), m_stationId, getRemoteAddress().c_str()));
+}	// ClientConnection::onCharacterDeleteFailed
+
+// ----------------------------------------------------------------------
+
 StationId ClientConnection::getRequestedAdminSuid() const {
     return m_requestedAdminSuid;
 }

@@ -19,7 +19,8 @@ TaskDeleteCharacter::TaskDeleteCharacter(uint32 clusterId, const NetworkId &char
 		TaskRequest(),
 		m_clusterId(clusterId),
 		m_characterId(characterId),
-		m_stationId(stationId)
+		m_stationId(stationId),
+		m_succeeded(false)
 {
 }
 
@@ -33,7 +34,8 @@ bool TaskDeleteCharacter::process(DB::Session *session)
 	qry.station_id=m_stationId; //lint !e713 // loss ofp recision unsigned long to long
 	
 	bool rval = session->exec(&qry);
-	
+	m_succeeded = rval;
+
 	qry.done();
 	return rval;
 }
@@ -42,9 +44,19 @@ bool TaskDeleteCharacter::process(DB::Session *session)
 
 void TaskDeleteCharacter::onComplete()
 {
+	if (!m_succeeded)
+	{
+		WARNING(true, ("TaskDeleteCharacter: login.delete_character failed for character %s stationId %u cluster %u", m_characterId.getValueString().c_str(), m_stationId, m_clusterId));
+	}
+
 	ClientConnection* target = LoginServer::getInstance().getValidatedClient(m_stationId);
 	if (target)
-		target->onCharacterDeletedFromLoginDatabase(m_characterId);
+	{
+		if (m_succeeded)
+			target->onCharacterDeletedFromLoginDatabase(m_characterId);
+		else
+			target->onCharacterDeleteFailed(m_characterId);
+	}
 }
 
 // ======================================================================

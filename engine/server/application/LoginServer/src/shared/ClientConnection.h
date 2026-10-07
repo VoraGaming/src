@@ -49,6 +49,7 @@ public:
 
 	void                          onCharacterDeletedFromLoginDatabase   (const NetworkId & characterId);
 	void                          onCharacterDeletedFromCluster         (const NetworkId & characterId);
+	void                          onCharacterDeleteFailed               (const NetworkId & characterId);
 	
 private:
 	ClientConnection(const ClientConnection&);
