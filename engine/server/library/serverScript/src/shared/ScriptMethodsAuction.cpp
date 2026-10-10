@@ -42,6 +42,11 @@ namespace ScriptMethodsAuctionNamespace
 	void JNICALL removeAllAuctions(JNIEnv *env, jobject script, jlong vendor);
 	void JNICALL reinitializeVendor(JNIEnv *env, jobject script, jlong vendor, jlong player);
 	void JNICALL updateVendorStatus(JNIEnv *env, jobject script, jlong vendor, jint status);
+	jboolean JNICALL auctionCreateImmediate(JNIEnv *env, jobject script, jlong owner, jlong item, jlong vendor, jint price, jstring description);
+	jboolean JNICALL auctionCancelAndRetrieve(JNIEnv *env, jobject script, jlong owner, jlong item, jlong vendor);
+
+	// the CS replaces the timer of every vendor listing with its own vendor timer; the GS only needs a timer > 0
+	const time_t cs_vendorListingSeconds = 30 * 24 * 60 * 60;
 }
 
 //========================================================================
@@ -64,6 +69,8 @@ const JNINativeMethod NATIVES[] = {
 	JF("_removeAllAuctions", "(J)V",removeAllAuctions),
 	JF("_reinitializeVendor", "(JJ)V",reinitializeVendor),
 	JF("_updateVendorStatus", "(JI)V", updateVendorStatus),
+	JF("_auctionCreateImmediate", "(JJJILjava/lang/String;)Z", auctionCreateImmediate),
+	JF("_auctionCancelAndRetrieve", "(JJJ)Z", auctionCancelAndRetrieve),
 };
 
 	return JavaLibrary::registerNatives(NATIVES, sizeof(NATIVES)/sizeof(NATIVES[0]));
@@ -302,3 +309,99 @@ void JNICALL ScriptMethodsAuctionNamespace::updateVendorStatus(JNIEnv *env, jobj
 
 	CommoditiesMarket::updateVendorStatus(vendorObject->getNetworkId(), status);
 }
+
+// ----------------------------------------------------------------------
+
+/**
+ * Lists an item from the owner's inventory on a vendor.
+ * Returns true if the listing was sent to the commodities server (the result is
+ * asynchronous: the item leaves the owner's inventory once the CS accepts it),
+ * false if it was rejected on this game server.
+ */
+jboolean JNICALL ScriptMethodsAuctionNamespace::auctionCreateImmediate(JNIEnv *env, jobject script, jlong owner, jlong item, jlong vendor, jint price, jstring description)
+{
+	CreatureObject *ownerObj = nullptr;
+	if (!JavaLibrary::getObject(owner, ownerObj))
+	{
+		WARNING(true, ("[designer bug] auctionCreateImmediate() owner parameter (1) is invalid"));
+		return JNI_FALSE;
+	}
+
+	ServerObject *itemObj = nullptr;
+	if (!JavaLibrary::getObject(item, itemObj))
+	{
+		WARNING(true, ("[designer bug] auctionCreateImmediate() item parameter (2) is invalid"));
+		return JNI_FALSE;
+	}
+
+	ServerObject *vendorObj = nullptr;
+	if (!JavaLibrary::getObject(vendor, vendorObj))
+	{
+		WARNING(true, ("[designer bug] auctionCreateImmediate() vendor parameter (3) is invalid"));
+		return JNI_FALSE;
+	}
+
+	JavaStringParam descriptionParam(description);
+	Unicode::String descriptionString;
+	if (!JavaLibrary::convert(descriptionParam, descriptionString))
+	{
+		WARNING(true, ("[designer bug] auctionCreateImmediate() description parameter (5) is invalid"));
+		return JNI_FALSE;
+	}
+
+	if (!vendorObj->isVendor())
+	{
+		WARNING(true, ("[designer bug] auctionCreateImmediate() vendor parameter (3) %s is not a vendor", vendorObj->getNetworkId().getValueString().c_str()));
+		return JNI_FALSE;
+	}
+
+	if (CommoditiesMarket::auctionCreateImmediate(*ownerObj, *itemObj, Unicode::String(), *vendorObj, price, cs_vendorListingSeconds, descriptionString))
+		return JNI_TRUE;
+
+	return JNI_FALSE;
+}	// ScriptMethodsAuctionNamespace::auctionCreateImmediate
+
+// ----------------------------------------------------------------------
+
+/**
+ * Cancels the owner's listing of an item on a vendor and retrieves the item to
+ * the owner's inventory. Asynchronous: returns true if both requests were sent
+ * to the commodities server, false if a parameter is invalid or the CS is down.
+ */
+jboolean JNICALL ScriptMethodsAuctionNamespace::auctionCancelAndRetrieve(JNIEnv *env, jobject script, jlong owner, jlong item, jlong vendor)
+{
+	CreatureObject *ownerObj = nullptr;
+	if (!JavaLibrary::getObject(owner, ownerObj))
+	{
+		WARNING(true, ("[designer bug] auctionCancelAndRetrieve() owner parameter (1) is invalid"));
+		return JNI_FALSE;
+	}
+
+	// the item object itself may be unloaded inside the vendor, so only its id is required
+	if (item == 0)
+	{
+		WARNING(true, ("[designer bug] auctionCancelAndRetrieve() item parameter (2) is invalid"));
+		return JNI_FALSE;
+	}
+
+	ServerObject *vendorObj = nullptr;
+	if (!JavaLibrary::getObject(vendor, vendorObj))
+	{
+		WARNING(true, ("[designer bug] auctionCancelAndRetrieve() vendor parameter (3) is invalid"));
+		return JNI_FALSE;
+	}
+
+	if (!ownerObj->isAuthoritative() || !vendorObj->isAuthoritative())
+	{
+		WARNING(true, ("[designer bug] auctionCancelAndRetrieve() owner and vendor must be authoritative on this server"));
+		return JNI_FALSE;
+	}
+
+	if (!CommoditiesMarket::isCommoditiesServerAvailable())
+		return JNI_FALSE;
+
+	NetworkId const itemId(static_cast<NetworkId::NetworkIdType>(item));
+	CommoditiesMarket::auctionCancel(*ownerObj, itemId.getValue());
+	CommoditiesMarket::auctionRetrieve(*ownerObj, itemId.getValue(), itemId, *vendorObj);
+	return JNI_TRUE;
+}	// ScriptMethodsAuctionNamespace::auctionCancelAndRetrieve

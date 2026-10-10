@@ -72,6 +72,7 @@ namespace ScriptMethodsResourceNamespace
 	jint         JNICALL getResourceAttribute(JNIEnv *env, jobject self, jlong resourceType, jstring attributeName);
 	jlong        JNICALL getRecycledVersionOfResourceType(JNIEnv * env, jobject self, jlong resourceType);
 	jboolean     JNICALL isValidResourceId(JNIEnv *env, jobject self, jlong resourceType);
+	jboolean     JNICALL isResourceDepleted(JNIEnv *env, jobject self, jlong resourceType);
 }
 
 
@@ -118,6 +119,7 @@ const JNINativeMethod NATIVES[] = {
 	JF("_getResourceContainerQuantity", "(J)I", getResourceContainerQuantity),
 	JF("_getResourceCtsData", "(J)Ljava/lang/String;", getResourceCtsData),
 	JF("_setResourceCtsData", "(JILjava/lang/String;)V", setResourceCtsData),
+	JF("_isResourceDepleted", "(J)Z", isResourceDepleted),
 };
 
 	return JavaLibrary::registerNatives(NATIVES, sizeof(NATIVES)/sizeof(NATIVES[0]));
@@ -1194,5 +1196,22 @@ jboolean JNICALL ScriptMethodsResourceNamespace::isValidResourceId(JNIEnv * /*en
 	}
 	return JNI_TRUE;
 }
+
+// ----------------------------------------------------------------------
+
+/**
+ * Returns true if the resource type's depletion time (game clock) has passed.
+ */
+jboolean JNICALL ScriptMethodsResourceNamespace::isResourceDepleted(JNIEnv * /*env*/, jobject /*self*/, jlong resourceType)
+{
+	ResourceTypeObject const * const typeObj = ServerUniverse::getInstance().getResourceTypeById(NetworkId(resourceType));
+	if (!typeObj)
+	{
+		WARNING(true, ("JavaLibrary::isResourceDepleted passed invalid resource type %s", NetworkId(resourceType).getValueString().c_str()));
+		return JNI_FALSE;
+	}
+
+	return typeObj->isDepleted() ? JNI_TRUE : JNI_FALSE;
+}	// ScriptMethodsResourceNamespace::isResourceDepleted
 
 // ======================================================================

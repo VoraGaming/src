@@ -1660,10 +1660,15 @@ void CommoditiesMarket::auctionCreateImmediate(CreatureObject &actorCreature, Ne
 
 // ----------------------------------------------------------------------
 
-void CommoditiesMarket::auctionCreateImmediate(CreatureObject &owner, ServerObject &item, const Unicode::String &itemLocalizedName, ServerObject &auctionContainer, BidAmount price, time_t timer, const Unicode::String &userDescription, bool premium)
+/**
+ * Validates an item listing and sends it to the commodities server.
+ * Returns true if the listing was sent to the CS (the CS result arrives
+ * later, in onAddAuction), false if it was rejected on this game server.
+ */
+bool CommoditiesMarket::auctionCreateImmediate(CreatureObject &owner, ServerObject &item, const Unicode::String &itemLocalizedName, ServerObject &auctionContainer, BidAmount price, time_t timer, const Unicode::String &userDescription, bool premium)
 {
 	if (!ConfigServerGame::getCommoditiesMarketEnabled())
-		return;
+		return false;
 
 	AuctionResult errorCode = ar_OK;
 	std::string itemRestrictedRejectionMessage;
@@ -1680,7 +1685,7 @@ void CommoditiesMarket::auctionCreateImmediate(CreatureObject &owner, ServerObje
 			CreateAuctionResponseMessage msg(item.getNetworkId(), errorCode, std::string());
 			client->send(msg, true);
 		}
-		return;	
+		return false;
 	}
 
 	params.clear();
@@ -1775,6 +1780,7 @@ void CommoditiesMarket::auctionCreateImmediate(CreatureObject &owner, ServerObje
 				owner.getModValue("manage_vendor"),
 				owner.getModValue("vendor_item_limit"));
 			s_pendingAdds[sequence] = auctionFee;
+			return true;
 		}
 		else
 		{
@@ -1783,12 +1789,14 @@ void CommoditiesMarket::auctionCreateImmediate(CreatureObject &owner, ServerObje
 
 			getCommoditiesServerConnection(); //attempt to reconnect to commodities server
 		}
-		
+
 	} else if (client)
 	{
 		CreateAuctionResponseMessage msg(itemId, errorCode, itemRestrictedRejectionMessage);
 		client->send(msg, true);
 	}
+
+	return false;
 }
 
 // ----------------------------------------------------------------------

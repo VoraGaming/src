@@ -54,7 +54,7 @@ public:
 
 	static void auctionCreatePermanent(const std::string &ownerName, const ServerObject &objectTemplate, const ServerObject &auctionContainer, BidAmount cost, const Unicode::String &userDescription, bool premium = false);
 
-	static void auctionCreateImmediate         (CreatureObject &owner, ServerObject &item, const Unicode::String &itemLocalizedName, ServerObject &auctionContainer, BidAmount price, time_t timer, const Unicode::String &userDescription, bool premium = false);
+	static bool auctionCreateImmediate         (CreatureObject &owner, ServerObject &item,const Unicode::String &itemLocalizedName, ServerObject &auctionContainer, BidAmount price, time_t timer, const Unicode::String &userDescription, bool premium = false);
 	static void auctionCreateImmediate         (CreatureObject &owner, NetworkId &item, const Unicode::String &itemLocalizedName, NetworkId &auctionContainer, BidAmount price, time_t timer, const Unicode::String &userDescription, bool premium = false);
 	static void transferVendorItemFromStockroom(CreatureObject &owner, NetworkId &item, const Unicode::String &itemLocalizedName, BidAmount price, time_t timer, const Unicode::String &userDescription);
 
